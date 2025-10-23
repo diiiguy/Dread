@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dread: Void of All | Story Reader</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for aesthetics */
+        #reading-area::-webkit-scrollbar {
+            width: 8px;
+        }
+        #reading-area::-webkit-scrollbar-thumb {
+            background-color: #4b5563; /* Gray-600 */
+            border-radius: 4px;
+        }
+        #reading-area::-webkit-scrollbar-track {
+            background: #1f2937; /* Gray-800 */
+        }
+        .nav-btn {
+            @apply p-2 rounded-full transition-colors duration-200 disabled:opacity-30 disabled:cursor-not-allowed;
+            @apply bg-gray-700 text-violet-400 hover:bg-gray-600 hover:text-violet-300;
+        }
+        /* Custom styling for the select dropdown */
+        #chapter-select {
+             appearance: none;
+             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+             background-repeat: no-repeat;
+             background-position: right 0.75rem center;
+             background-size: 1.5em 1.5em;
+             padding-right: 2.5rem; /* Space for the custom arrow */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen flex flex-col" style="font-family: 'Inter', sans-serif;">
+    <script>
+        // Use a standard fetch with exponential backoff for API calls
+        const fetchWithRetry = async (url, options, retries = 3) => {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === retries - 1) throw error;
+                    const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                    // Do not log retries as errors in the console
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        };
+        
+        // --- FIREBASE SETUP (MANDATORY GLOBALS) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth, userId = 'loading';
+        let isAuthReady = false;
+        
+        // Global references for imported Firestore functions
+        let docRef, setDocRef, getDocRef; 
+
+        // --- STORY DATA (Matches story.md) ---
+        const chapterData = {
+            'ch1': {
+                title: 'Chapter 1: The Foundation',
+                content: `
+                    <p>The only sounds in the small, windowless room were the rhythmic, soft click of my mechanical keyboard and the steady, low hum of the desktop fan fighting a losing battle against the late summer humidity. I was deep in a tedious administrative task: a mountain of spreadsheets that kept my mind occupied but detached from the world outside. This detachment, I would later realize, was both a strength and a fatal flaw.</p>
+
+                    <p>I was mid-sentence, typing a formula for calculating supply inventory, when the white background of the monitor didn't flicker or flash, it simply began to <em>de-saturate</em>. It was an effect so subtle at first I thought my eyes were playing tricks on me. The vibrant glow of the screen faded, replaced by a sickly, muted grey. It wasn't a loss of power; it felt like a loss of <em>light itself</em>.</p>
+
+                    <p>I stopped typing. The soft blue LED from the power button on the monitor was the next to go, not winking out, but slowly receding, drawing inward like water down a drain until it was just a pinprick, then nothing.</p>
+
+                    <p>An unnatural, dead blackness descended.</p>
+
+                    <p>I felt a sudden, icy knot twist in my gut. My first, immediate thought was of an isolated, localized power failure, yet the silence was wrong. The desktop fan, which had been a constant companion for years, had died mid-hum. The refrigerator in the next room, which never stopped running, was quiet. The silence wasn't just an <em>absence</em> of sound; it felt like a <em>pressure</em>, a tangible void that pressed against my eardrums. This wasn't a local issue; the entire grid had flatlined.</p>
+
+                    <p>Scrambling for the desk drawer, my hands fumbled past the loose change and old phone chargers until I gripped the cold, hard casing of my tactical flashlight. My heart hammered against my ribs, a chaotic drum solo in the universal quiet.</p>
+
+                    <p>I flipped the switch. Nothing. I tried again, twisting the cap, shaking the tube. Damn it. The beam should have cut the darkness, but the batteries I’d meant to replace last week had finally, completely given out. A brand-new battery pack, uselessly still sealed in its plastic on the shelf above.</p>
+
+                    <p>The rising panic was a familiar, unwelcome guest, but it was quickly shoved aside by a chilling curiosity. My anti-social nature had trained me to avoid people, but my pragmatic mind demanded verification. This wasn't a circuit breaker. This felt astronomical.</p>
+
+                    <p>I moved to the single, heavy curtain covering the room's small window. My hand shook slightly as I pulled the fabric back, bracing myself for the sight of a city-wide blackout, maybe a localized event.</p>
+
+                    <p>Instead, I met an absolute, overwhelming abyss.</p>
+
+                    <p>There was no city. There was no sky. There was no <em>moon</em>, no <em>stars</em>. It wasn't night; it was the total, permanent absence of any celestial light source. It was a darkness so thick, it felt less like an empty space and more like being lost deep within an endless, starless forest, where the blackness has mass and holds you still. The air outside felt colder, denser, and utterly still. I leaned close to the cold glass, trying to pierce the gloom, but the darkness was a solid wall. A profound, crushing dread, far heavier than any fear of the dark, settled over me. This wasn't a blackout. This was the world ending, not in fire, but in a smothering, cosmic shroud.</p>
+
+                    <p>The cold was the next thing that seized my attention. It was a dense, humidity-sucking chill that seeped through the windowpane and the thin fabric of my shirt. It wasn't the slow drop of a winter evening, but a rapid, aggressive temperature plunge, confirming that whatever had killed the light had also eliminated the sun's residual warmth. I dropped the curtain and stumbled back, relying entirely on the muscle memory of the layout of my small apartment to keep me from falling.</p>
+
+                    <p>The terror was there, a sharp spike of adrenaline, but it was immediately met and overpowered by my central, defining strength: the raw, unyielding will to live. Screaming was pointless. Crying achieved nothing. I had to see. I had to know the scope of the problem so I could start cataloging solutions. My mind, usually focused on the patterns of spreadsheets, was now hyper-focused on survival geometry.</p>
+
+                    <p>I needed the flashlight, the working one.</p>
+
+                    <p>The shelving unit was three feet to my left, opposite the desk. I extended my hands, moving like a blind man, my fingers sweeping across the wall, counting the paces. The drywall felt rough, cold, and slightly damp now. <em>One, two, three.</em> My fingertips hit the wooden edge of the shelf. I reached up to the second level, where I always kept the battery supplies, relying on the spatial map I had ingrained over months of living alone.</p>
+
+                    <p><em>Breathe in. Focus.</em></p>
+
+                    <p>My hand knocked over a plastic cup of old pens, the tiny, muffled sound echoing disproportionately loud in the heavy silence. I ignored it. My fingers finally grazed the smooth, sealed plastic of the AA battery multipack. A wave of intense relief, sharp enough to make my knees tremble, washed over me. It was a small victory, but in this oppressive darkness, a single packet of power felt like finding a vault of gold.</p>
+
+                    <p>I knelt, still keeping one hand anchored to the shelf, and tore the packaging open with my teeth. The small batteries spilled into my lap, cold and solid. It took a full minute, my breath coming in short, focused bursts, to replace the dead cells in the tactical light.</p>
+
+                    <p><em>Click.</em></p>
+
+                    <p>A narrow, pure white beam of LED light ripped a hole in the blackness. The intense, focused light made the room feel smaller, more real, and for a fleeting second, safer.</p>
+
+                    <p>The first thing I did was check the digital clock on the desktop. It was dead. I moved the beam to my cell phone, charging uselessly on the desk. I yanked it off the cord and tried to power it on. The screen flickered, displaying the battery icon, then immediately displayed a huge, red 'NO SERVICE' notification before settling on a black screen. No power for the towers, no satellites to connect to, or perhaps, simply, nothing left to connect <em>to</em>. The social world, which I had only interacted with peripherally, was gone.</p>
+
+                    <p>My next step, guided by my trained pattern recognition, was to assess the environment beyond the walls. I moved back to the window, the flashlight cutting a path through the suffocating gloom. The darkness outside hadn't lessened, but the cold had intensified. It smelled different, too: a sharp, mineral scent, like ozone mixed with damp earth.</p>
+
+                    <p>I peered through the edge of the pulled-back curtain. Where the street lamps should have been, there were now only faint, intermittent glows, like bioluminescent patches growing low to the ground. They were too slow to be lights and too numerous to be coincidence. Something was down there, moving in the profound dark.</p>
+
+                    <p>I watched, holding my breath, as one of the glows pulsed, momentarily brightening into a sickly, cold blue. The light was just enough to illuminate the outline of what looked like a shattered telephone pole, now tilted at a sickening angle. And then, the blue light moved, dragging itself along the pavement. It wasn't a static glow. It was a creature.</p>
+
+                    <p>My gut clenched, but my mind was already racing, cataloging the data. <em>New life. Slow. Bioluminescent. Probably cold-adapted.</em> The creature was unlike anything I knew, yet its slow, deliberate motion suggested it was either injured or simply sluggish due to the extreme cold. It was a problem for later. The immediate priority was shelter.</p>
+
+                    <p>I let the curtain fall and turned my back on the cosmic darkness, forcing myself to look at the small, familiar space that was now my entire world. The beam of the flashlight swept across the door. I moved to it, securing the deadbolt and sliding the heavy chain into place. It felt flimsy. I dragged my desk chair, a hefty thing with a steel frame, and wedged its back firmly under the handle. It wouldn't stop a determined assault, but it was a psychological barrier and a decent early warning system.</p>
+
+                    <p>The cold was becoming unbearable, a numbing ache in my fingers and toes. I needed insulation. I needed information. I needed to move before the cold sapped my will, but the sheer effort of thinking felt heavy.</p>
+
+                    <p>My anti-social habits, which once made me an outcast, were now my shield. I had supplies: canned food and bottled water, enough for two weeks, stashed for my own convenience. I had a battery-powered radio in my survival kit, a piece of prepper paranoia that now felt like prophetic genius.</p>
+
+                    <p>I took a final, deep, shuddering breath of the cold, stale air. The world outside had ended in silence and shadow, replacing humanity's grid with a chilling, biological unknown. Survival wasn't a spreadsheet; it was a physical task that required perfect execution, starting now. I gripped the flashlight tighter, its white beam a fragile tether to sanity. I had to get to the radio. I had to find out if anyone else was left to share this void.</p>
+
+                    <p>The next move had to be perfect.</p>
+                `
+            },
+            'ch2': {
+                title: 'Chapter 2: The Static and the Slime',
+                content: `
+                    <p>The flashlight’s beam, which had seemed so powerful moments ago, now looked weak and anxious as it danced across the ceiling. I gripped the cold aluminum casing, the metal leaching warmth from my palm. The primal need for insulation overcame the immediate need for information. Cold killed faster than curiosity.</p>
+
+                    <p>My bedroom was directly across the apartment’s short hallway, past the silent kitchen. I moved the chair away from the door with a quiet scrape, wincing at the noise, and kept the flashlight pointed down, forcing myself to rely on the limited ambient light reflection for my periphery. Stealth was instinctual now.</p>
+
+                    <p>I swept the beam into the small closet. It was packed not with fashion, but with pragmatic, heavy-duty gear: thermal camping blankets, wool layers, and two high-quality, cold-weather sleeping bags I had bought years ago, less for camping and more for surviving a winter blackout—a scenario that now felt quaintly optimistic.</p>
+
+                    <p>I pulled out the heaviest items: a thick, water-resistant ski jacket, thermal fleece pants, and a pair of heavy socks. Dressing in the darkness was clumsy, a dance of fumbling fabric. Every layer I added was a victory against the invading cold, a small measure of control restored. The moment I zipped the thick jacket, the numbing chill was pushed back, replaced by a manageable, almost comforting heat.</p>
+
+                    <p>With the cold partially defeated, the need for information surged. The radio was in the backpack I kept under the bed.</p>
+
+                    <p>I moved into the bedroom. The furniture was a collection of stark, functional boxes. The radio, a small, durable unit with a crank for emergency power, was retrieved easily. I sat on the edge of the bed, the mattress protesting with a subdued squeak that felt deafening in the silence. I set the radio on my knee.</p>
+
+                    <p>I flipped the power switch. The tiny, battery-powered indicator glowed a steady, reassuring orange. The radio worked.</p>
+
+                    <p>Taking another deep breath, I slowly turned the tuning dial. The speakers erupted, not with music or news, but with a wall of white noise: pure, aggressive static. I scanned the entire FM band, moving the dial with painful slowness, listening intently for any break in the monotonous hiss. Nothing. The commercial airwaves were a flat, dead line.</p>
+
+                    <p>I switched to AM, twisting the antenna out and trying different orientations, a fisherman casting blindly into a poisoned sea. More static. Just as I was about to give up on the standard bands, a faint, metallic <em>chirp</em> cut through the noise. It was fleeting, like a ghost sighing through the speakers. I stopped breathing, my hand frozen on the dial.</p>
+
+                    <p>I backed up slowly, feathering the tuner, focusing with a concentration usually reserved for debugging code. The chirp came again, slightly louder this time, followed by a series of rapid, rhythmic clicks—a pulse of digital sound, far too structured to be random interference. It sounded like a specialized frequency, maybe military or amateur radio. I adjusted the dial again, trying to lock it in.</p>
+
+                    <p>The clicks resolved into a low, compressed voice. It was heavily overlaid with static, but the emotion was clear: desperation.</p>
+
+                    <p>“...any station, this is Site Beta. Repeat, Site Beta. Can anyone read us? The **[static hiss]**… the surface anomalies are mobilizing. We are registering unprecedented drops in ambient light and temperature. If you are hearing this, do not attempt surface **[shrieking static]**… repeat, stay indoors. We have visual confirmation of **[voice breaks]**… bio-luminescence and high kinetic mass. They are not animals. They are—”</p>
+
+                    <p>The signal vanished as abruptly as it had arrived, replaced by the deafening white noise. My heart hammered, not from fear, but from the brutal confirmation. Someone else was out there. Someone else knew. They called the things **“surface anomalies”** and described them with **“high kinetic mass.”** They weren't just slugs; they were something heavy, something fast.</p>
+
+                    <p>I immediately cranked the emergency handle for several long, focused minutes, charging the internal battery, then tried the frequency again. Nothing but static. I tried for ten solid minutes, my anti-social programming battling fiercely with the desperate, primal urge for human contact. I had to know what the creature outside my window was, and more importantly, what it <em>wanted</em>.</p>
+
+                    <p>Frustrated, I lowered the radio and let the beam of the flashlight fall to the floor. The white light illuminated the carpet, and that’s when I saw it.</p>
+
+                    <p>It was small, about the size of a golf ball, and rested just a few inches from the leg of my bed. It looked like a puddle of clear, thick gelatin, trembling slightly as if still settling after a recent drop. It didn't belong to the house. It hadn't been there when I fumbled for the batteries.</p>
+
+                    <p>As the flashlight beam hit it, the gelatinous mass reacted, not by moving away, but by slightly expanding, the clear material absorbing the photons. It began to shift color, taking on the stark, sterile white of the LED light.</p>
+
+                    <p>I leaned closer, holding my breath, my analytical mind taking over completely. It was utterly still, emitting no odor, and making no sound. It was new. It was life. And I knew, with the chilling certainty of absolute pattern recognition, that this was the answer to the end of the world. It was a fragment of the **"new creatures"** the outside world was generating. I reached out a tentative finger, drawn by an almost magnetic curiosity.</p>
+
+                    <p>This was the first **Slime**.</p>
+                `
+            },
+            'ch3': {
+                title: 'Chapter 3: The First Fusion (Placeholder)',
+                content: `
+                    <p class="text-gray-400 italic">Toni finally touches the Slime. The mysterious material integrates with his body, giving him a glimpse into his new abilities and the true nature of the Eclipse. This marks the beginning of Arc 1: Discovery.</p>
+                    <p class="mt-4">***</p>
+                    <p class="text-lg font-semibold text-violet-400">Content pending: Continue writing Chapter 3 here.</p>
+                `
+            },
+            'ch4': { title: 'Chapter 4: The Sound of Silence (Placeholder)', content: '<p>More chapters to come...</p>' },
+            'ch5': { title: 'Chapter 5: Outward Bound (Placeholder)', content: '<p>More chapters to come...</p>' },
+        };
+        
+        // Array of chapter keys for navigation purposes
+        const chapterKeys = Object.keys(chapterData);
+
+        // --- FIREBASE INITIALIZATION AND AUTHENTICATION ---
+        window.onload = async () => {
+            if (!firebaseConfig) {
+                console.error("Firebase configuration is missing.");
+                document.getElementById('loading-message').textContent = 'Error: Firebase configuration not found.';
+                return;
+            }
+
+            try {
+                // Dynamic imports for Firebase modules
+                const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js");
+                const { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js");
+                // Import all firestore modules under a single name to avoid ReferenceErrors
+                const firestoreModules = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+                
+                const app = initializeApp(firebaseConfig);
+                db = firestoreModules.getFirestore(app);
+                auth = getAuth(app);
+                
+                // Assign imported Firestore functions to the global variables
+                docRef = firestoreModules.doc;
+                setDocRef = firestoreModules.setDoc;
+                getDocRef = firestoreModules.getDoc;
+
+                // Log level for debugging
+                firestoreModules.setLogLevel('debug');
+                
+                // --- AUTHENTICATION GUARANTEE START ---
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                if (auth.currentUser) {
+                    userId = auth.currentUser.uid;
+                    isAuthReady = true;
+
+                    setupChapterList();
+                    await loadProgress();
+                    document.getElementById('loading-overlay').classList.add('hidden');
+                } else {
+                    throw new Error("Failed to authenticate user.");
+                }
+                // --- AUTHENTICATION GUARANTEE END ---
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error during Firebase initialization or sign-in:", error);
+                document.getElementById('loading-message').textContent = 'Error initializing app. Check console for details.';
+            }
+        };
+
+        // --- FIREBASE PROGRESS FUNCTIONS ---
+        const PROGRESS_DOC_ID = 'toni_dread_progress'; 
+
+        const getProgressDocRef = (uid) => {
+            const path = `/artifacts/${appId}/users/${uid}/reading_progress`;
+            return docRef(db, path, PROGRESS_DOC_ID); 
+        };
+
+        const saveProgress = async () => {
+            if (!isAuthReady || !db || !userId) {
+                console.warn("Attempted to save progress before auth was ready.");
+                return;
+            }
+
+            const readingArea = document.getElementById('reading-area');
+            const currentChapter = readingArea.dataset.currentChapter || 'ch1';
+            
+            const scrollPercentage = readingArea.scrollTop / (readingArea.scrollHeight - readingArea.clientHeight);
+            
+            const progressData = {
+                lastChapter: currentChapter,
+                scrollPosition: isNaN(scrollPercentage) ? 0 : scrollPercentage,
+                timestamp: Date.now()
+            };
+
+            try {
+                const docReference = getProgressDocRef(userId);
+                await setDocRef(docReference, progressData); 
+            } catch (e) {
+                console.error("Error saving progress:", e);
+            }
+        };
+
+        const loadProgress = async () => {
+            if (!isAuthReady || !db || !userId) return;
+
+            try {
+                const docReference = getProgressDocRef(userId);
+                const docSnap = await getDocRef(docReference); 
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    const chapterId = data.lastChapter || 'ch1';
+                    const scrollPercent = data.scrollPosition || 0;
+
+                    setActiveChapter(chapterId, false); 
+
+                    const readingArea = document.getElementById('reading-area');
+                    
+                    setTimeout(() => {
+                         const maxScroll = readingArea.scrollHeight - readingArea.clientHeight;
+                         readingArea.scrollTop = maxScroll * scrollPercent;
+                    }, 50);
+
+                } else {
+                    setActiveChapter('ch1', false);
+                }
+            } catch (e) {
+                console.error("Error loading progress:", e);
+                setActiveChapter('ch1', false); 
+            }
+        };
+
+        // --- UI & SCROLL HANDLING ---
+
+        let scrollTimeout;
+
+        const handleScroll = () => {
+            clearTimeout(scrollTimeout);
+            scrollTimeout = setTimeout(saveProgress, 1000); 
+        };
+
+        // Populates the dropdown menu
+        const setupChapterList = () => { 
+            const select = document.getElementById('chapter-select');
+            select.innerHTML = '';
+            
+            chapterKeys.forEach(id => {
+                const chapter = chapterData[id];
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = chapter.title;
+                select.appendChild(option);
+            });
+            // Assign handlers to the navigation buttons
+            document.getElementById('prev-chapter-btn').onclick = goToPreviousChapter;
+            document.getElementById('next-chapter-btn').onclick = goToNextChapter;
+        };
+
+        // Main function to switch chapters
+        const setActiveChapter = (chapterId, resetScroll = true) => {
+            const readingArea = document.getElementById('reading-area');
+            const content = chapterData[chapterId];
+
+            if (!content) return;
+
+            // Update content
+            document.getElementById('chapter-title').textContent = content.title;
+            document.getElementById('chapter-content').innerHTML = content.content;
+            readingArea.dataset.currentChapter = chapterId;
+
+            // Find the index for navigation control
+            const currentIndex = chapterKeys.indexOf(chapterId);
+            const isFirst = currentIndex === 0;
+            const isLast = currentIndex === chapterKeys.length - 1;
+
+            // Update button state
+            document.getElementById('prev-chapter-btn').disabled = isFirst;
+            document.getElementById('next-chapter-btn').disabled = isLast;
+
+            // Sync dropdown selection
+            document.getElementById('chapter-select').value = chapterId;
+
+            // Reset scroll position when actively changing chapters
+            if (resetScroll) {
+                readingArea.scrollTop = 0;
+                saveProgress(); 
+            }
+        };
+        
+        // Navigation functions
+        const goToPreviousChapter = () => {
+            const currentChapterId = document.getElementById('reading-area').dataset.currentChapter;
+            const currentIndex = chapterKeys.indexOf(currentChapterId);
+            if (currentIndex > 0) {
+                const prevId = chapterKeys[currentIndex - 1];
+                setActiveChapter(prevId, true);
+            }
+        };
+
+        const goToNextChapter = () => {
+            const currentChapterId = document.getElementById('reading-area').dataset.currentChapter;
+            const currentIndex = chapterKeys.indexOf(currentChapterId);
+            if (currentIndex < chapterKeys.length - 1) {
+                const nextId = chapterKeys[currentIndex + 1];
+                setActiveChapter(nextId, true);
+            }
+        };
+    </script>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 z-50 bg-gray-900 flex items-center justify-center">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500 mx-auto"></div>
+            <p id="loading-message" class="mt-4 text-gray-400">Initiating Void Connection...</p>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-gray-800 shadow-xl p-4 sticky top-0 z-20">
+        <h1 class="text-3xl font-bold text-violet-400 tracking-wider text-center">
+            DREAD: VOID OF ALL
+        </h1>
+        <p class="text-sm text-gray-500 text-center mt-1">Toni's Saga</p>
+    </header>
+
+    <!-- Main Content Grid -->
+    <!-- The reading area and desktop ad column are wrapped to manage centering and scrolling -->
+    <main class="flex flex-1 justify-center overflow-hidden">
+        
+        <div class="flex w-full max-w-6xl h-full">
+            <!-- Reading Area (Takes up primary space). Note the pb-16 to ensure bottom ad doesn't cover text on mobile. -->
+            <section id="reading-area" onscroll="handleScroll()" class="flex-1 p-6 sm:p-10 overflow-y-auto scroll-smooth pb-16">
+                <article class="max-w-3xl mx-auto">
+                    
+                    <!-- Chapter Control Bar (Dropdown and Arrows) -->
+                    <div id="chapter-controls" class="flex items-center justify-center mb-8 border-b border-gray-700 pb-4">
+                        
+                        <button id="prev-chapter-btn" class="nav-btn mr-4" disabled aria-label="Previous Chapter">
+                            <!-- Icon for Chevron Left -->
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        </button>
+
+                        <select id="chapter-select" 
+                                onchange="setActiveChapter(this.value, true)" 
+                                class="flex-grow w-full max-w-sm bg-gray-700 text-gray-100 p-2 rounded-lg focus:ring-violet-500 focus:border-violet-500 text-center">
+                            <!-- Options populated by JS -->
+                        </select>
+
+                        <button id="next-chapter-btn" class="nav-btn ml-4" aria-label="Next Chapter">
+                            <!-- Icon for Chevron Right -->
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </button>
+                    </div>
+
+                    <!-- Chapter Title -->
+                    <h2 id="chapter-title" class="text-4xl font-extrabold mb-6 text-gray-200 border-b border-violet-600 pb-3">
+                        Loading...
+                    </h2>
+                    
+                    <!-- Chapter Content -->
+                    <div id="chapter-content" class="text-lg leading-relaxed space-y-6 text-gray-300">
+                        <p>Please wait while the files load.</p>
+                    </div>
+                </article>
+            </section>
+
+            <!-- Ad Unit B: Desktop Sidebar Ad (Sticky, hidden on small screens) -->
+            <aside class="hidden lg:block w-64 p-4 flex-shrink-0">
+                <div class="sticky top-20 mt-10">
+                    <div class="w-full h-96 text-center text-sm text-gray-400 bg-gray-700/50 border border-dashed border-gray-600 rounded flex items-center justify-center relative">
+                        [Ad Unit B Placeholder: Skyscraper Ad 160x600]
+                        <p class="absolute bottom-2 text-xs">Generated Income Block</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </main>
+    
+    <!-- Ad Unit A: Fixed Bottom Banner (Responsive, Mobile Only - Hidden on screens 1024px and wider) -->
+    <div class="fixed bottom-0 left-0 right-0 z-40 bg-gray-800 border-t border-violet-600 shadow-2xl p-2 lg:hidden">
+        <div class="max-w-7xl mx-auto flex justify-center items-center h-10">
+            <div class="w-full h-full text-center text-xs sm:text-sm text-gray-400 bg-gray-700/50 border border-dashed border-gray-600 rounded flex items-center justify-center relative">
+                [Ad Unit A Placeholder: Responsive Banner Ad 728x90 / 320x50]
+                <p class="absolute bottom-1 right-2 text-xs text-gray-500">Sponsored</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
